@@ -52,15 +52,15 @@ void OutputHandler::initialise()
   return;
 }
 TH1D* OutputHandler::getHist(Calculator::ObsFunc func, StatHandler::StatMethod method){ //, int counter
-    // std::vector<TH1D*> samplehists;
-    // for(int i = -1;i<10;++i) { //counter was originally 10
-    //   LOGF(info,"calculator %i",i);
-    //   samplehists.push_back(calculator.calculate(func,i));
-    // }
-    // auto reth = stathandler->getNominal(samplehists,method);
+    std::vector<TH1D*> samplehists;
+    for(int i = -1;i<10;++i) { //counter was originally 10
+      LOGF(info,"calculator %i",i);
+      samplehists.push_back(calculator.calculate(func,i));
+    }
+    auto reth = stathandler->getNominal(samplehists,method);
     //sysHandler->applySyst(reth);
 
-    auto reth = calculator.calculate(func,-1);
+   // auto reth = calculator.calculate(func,-1);
 
     return reth;
 }
