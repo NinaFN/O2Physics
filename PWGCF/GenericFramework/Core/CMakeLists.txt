@@ -18,6 +18,9 @@ o2physics_add_library(GFWCore
                         GFWWeights.cxx
                         FlowPtContainer.cxx
                         BootstrapProfile.cxx
+                        OutputHandler.cxx
+                        StatHandler.cxx
+                        Calculator.cxx
                PUBLIC_LINK_LIBRARIES O2::Framework O2Physics::AnalysisCore)
 
 o2physics_target_root_dictionary(GFWCore
@@ -30,4 +33,7 @@ o2physics_target_root_dictionary(GFWCore
                       GFWConfig.h
                       FlowPtContainer.h
                       BootstrapProfile.h
+                      OutputHandler.h
+                      StatHandler.h
+                      Calculator.h
               LINKDEF GenericFrameworkLinkDef.h)

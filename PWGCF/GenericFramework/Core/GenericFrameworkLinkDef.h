@@ -24,6 +24,9 @@
 #pragma link C++ class GFWWeights + ;
 #pragma link C++ class BootstrapProfile + ;
 #pragma link C++ class FlowPtContainer + ;
+#pragma link C++ class OutputHandler + ;
+#pragma link C++ class StatHandler + ;
+#pragma link C++ class Calculator + ;
 #pragma link C++ class o2::analysis::genericframework::GFWBinningCuts + ;
 #pragma link C++ class o2::analysis::genericframework::GFWRegions + ;
 #pragma link C++ class o2::analysis::genericframework::GFWCorrConfigs + ;

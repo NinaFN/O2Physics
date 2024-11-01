@@ -17,7 +17,7 @@
 #include "Framework/RunningWorkflowInfo.h"
 #include "Framework/HistogramRegistry.h"
 
-#include "Common/DataModel/PIDResponse.h"
+//#include "Common/DataModel/PIDResponse.h"
 #include "Common/DataModel/EventSelection.h"
 #include "Common/Core/TrackSelection.h"
 #include "Common/DataModel/TrackSelectionTables.h"
@@ -26,10 +26,15 @@
 #include "GFWPowerArray.h"
 #include "GFW.h"
 #include "GFWCumulant.h"
-#include "TList.h"
+#include "FlowContainer.h"
+#include "FlowPtContainer.h"
+#include "GFWConfig.h"
+#include "GFWWeights.h"
 #include <TProfile.h>
 #include <TRandom3.h>
+#include <TF1.h>
 #include <iostream>
+
 
 
 using namespace o2;
@@ -49,16 +54,15 @@ struct GfwTutorial {
   O2_DEFINE_CONFIGURABLE(cfgCutChi2prTPCcls, float, 2.5, "Chi2 per TPC clusters")
   O2_DEFINE_CONFIGURABLE(cfgUseNch, bool, false, "Use Nch for flow observables")
   O2_DEFINE_CONFIGURABLE(cfgNbootstrap, int, 10, "Number of subsamples")
-  O2_DEFINE_CONFIGURABLE(cfgTPCCut, float, 2, "Cut on PID Nsigma from TPC");
+  //O2_DEFINE_CONFIGURABLE(cfgTPCCut, float, 2, "Cut on PID Nsigma from TPC");
 
   ConfigurableAxis axisVertex{"axisVertex", {20, -10, 10}, "vertex axis for histograms"};
   ConfigurableAxis axisPhi{"axisPhi", {60, 0.0, constants::math::TwoPI}, "phi axis for histograms"};
   ConfigurableAxis axisEta{"axisEta", {40, -1., 1.}, "eta axis for histograms"};
-  ConfigurableAxis axisPt{"axisPt", {VARIABLE_WIDTH, 0.2, 0.25, 0.30, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.10, 1.20, 1.30, 1.40, 1.50, 1.60, 1.70, 1.80, 1.90, 2.00, 2.20, 2.40, 2.60, 2.80, 3.00}, "pt axis for histograms"};
+  ConfigurableAxis axisPt{"axisPt", {VARIABLE_WIDTH, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.2, 2.4, 2.6, 2.8, 3, 3.5, 4, 5, 6, 8, 10}, "pt axis for histograms"};
   ConfigurableAxis axisMultiplicity{"axisMultiplicity", {VARIABLE_WIDTH, 0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90}, "centrality axis for histograms"};
 
-
-  std::vector<double> ptbinning = {0.2, 0.25, 0.30, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95, 1.00, 1.10, 1.20, 1.30, 1.40, 1.50, 1.60, 1.70, 1.80, 1.90, 2.00, 2.20, 2.40, 2.60, 2.80, 3.00};
+  std::vector<double> ptbinning = {0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.2, 2.4, 2.6, 2.8, 3, 3.5, 4, 5, 6, 8, 10};
   int ptbins = ptbinning.size() - 1;
 
   Filter collisionFilter = nabs(aod::collision::posZ) < cfgCutVertex;
@@ -72,13 +76,20 @@ struct GfwTutorial {
   // Define output
   HistogramRegistry registry{"registry"};
 
+
+  //Define flow container?
+  OutputObj<FlowContainer> fFC{FlowContainer("FlowContainer")};
+
+
   // define global variables
   GFW* fGFW = new GFW(); 
+  TRandom3* fRndm = new TRandom3(0);
   TAxis* fPtAxis;
   std::vector<GFW::CorrConfig> corrconfigs;
 
   using aodCollisions = soa::Filtered<soa::Join<aod::Collisions, aod::EvSels, aod::CentRun2V0Ms>>;
-  using aodTracks = soa::Filtered<soa::Join<aod::Tracks, aod::TrackSelection, aod::TracksExtra, aod::pidTPCPi, aod::pidTPCPr, aod::pidTPCKa>>;
+  using aodCollisionsRun3 = soa::Filtered<soa::Join<aod::Collisions, aod::EvSels, aod::CentFT0Cs>>;
+  using aodTracks = soa::Filtered<soa::Join<aod::Tracks, aod::TrackSelection, aod::TracksExtra>>;
 
   void init(InitContext const&)
   {
@@ -96,33 +107,41 @@ struct GfwTutorial {
     registry.add("hMult", "", {HistType::kTH1D, {{3000, 0.5, 3000.5}}});
     registry.add("hCent", "", {HistType::kTH1D, {{90, 0, 90}}});
      
-    //registry.add("c22", "", {HistType::kTProfile, {axisMultiplicity}});
-    registry.add("c22pi", "", {HistType::kTProfile, {axisMultiplicity}});
-
-    //registry.add("ptpoi", "", {HistType::kTProfile, {axisPt}});
-    // registry.add("pion", "", {HistType::kTProfile, {axisMultiplicity}});
-    // registry.add("kaon", "", {HistType::kTProfile, {axisMultiplicity}});
-    // registry.add("proton", "", {HistType::kTProfile, {axisMultiplicity}});
+    registry.add("c22", "", {HistType::kTProfile, {axisMultiplicity}});
+    registry.add("ptpoi", "", {HistType::kTProfile, {axisPt}});
     
 
 //pT flow
+    fGFW->AddRegion("refFull", -0.8, 0.8, 1, 1);
     fGFW->AddRegion("refN", -0.8, -0.4, 1, 1);
     fGFW->AddRegion("refP", 0.4, 0.8, 1, 1);
     fGFW->AddRegion("poiN", -0.8, -0.4, 1+fPtAxis->GetNbins(), 2);
     fGFW->AddRegion("olN", -0.8, -0.4, 1, 4);
 
     corrconfigs.push_back(fGFW->GetCorrelatorConfig("refN {2} refP {-2}", "ChGap22", kFALSE));
-    //corrconfigs.push_back(fGFW->GetCorrelatorConfig("poiN refN | olN {2} refP {-2}", "ChGap22", kTRUE));
+    corrconfigs.push_back(fGFW->GetCorrelatorConfig("refN {3} refP {-3}", "ChGap32", kFALSE));
+    corrconfigs.push_back(fGFW->GetCorrelatorConfig("refN {4} refP {-4}", "ChGap42", kFALSE));
 
-    // corrconfigs.push_back(fGFW->GetCorrelatorConfig("refN {2} refP {-2}", "ChGap22Pi", kFALSE));
-    // corrconfigs.push_back(fGFW->GetCorrelatorConfig("refN {2} refP {-2}", "ChGap22Ka", kFALSE));
-    // corrconfigs.push_back(fGFW->GetCorrelatorConfig("refN {2} refP {-2}", "ChGap22Pr", kFALSE));
+
+    corrconfigs.push_back(fGFW->GetCorrelatorConfig("refN {2 2} refP {-2 -2}", "ChGap24", kFALSE));
+
+    corrconfigs.push_back(fGFW->GetCorrelatorConfig("poiN refN | olN {2} refP {-2}", "ChGap22", kTRUE));
+
    
     fGFW->CreateRegions();
+
+    TObjArray* oba = new TObjArray();
+    oba->Add(new TNamed("ChGap22", "ChGap22"));
+    for (Int_t i=0;i<fPtAxis->GetNbins();i++)
+      oba->Add(new TNamed(Form("ChGap22_pt_%i",i+1), "ChGap22_pTDiff"));
+    fFC->SetName("FlowContainer");
+    fFC->SetXAxis(fPtAxis);
+    fFC->Initialize(oba,axisMultiplicity,cfgNbootstrap);
+    delete oba;
   }
 
   template <char... chars>
-  void FillProfile(const GFW::CorrConfig& corrconf, const ConstStr<chars...>& tarName, const double& cent) //, const int& ptBin
+  void FillProfile(const GFW::CorrConfig& corrconf, const double& cent, const int& rndm) 
   {
     double dnx, val;
     dnx = fGFW->Calculate(corrconf, 0, kTRUE).real();
@@ -132,7 +151,7 @@ struct GfwTutorial {
     if (!corrconf.pTDif) {
       val = fGFW->Calculate(corrconf, 0, kFALSE).real() / dnx;
       if (TMath::Abs(val) < 1)
-        registry.fill(tarName, cent, val, dnx);
+        fFC->FillProfile(corrconf.Head.c_str(),cent,val,dnx,rndm);
       return;
     }
 
@@ -140,7 +159,7 @@ struct GfwTutorial {
   }
 
   template <char... chars>
-  void FillPtProfile(const GFW::CorrConfig& corrconf, const ConstStr<chars...>& tarName, const double& cent) //, const int& ptBin
+  void FillPtProfile(const GFW::CorrConfig& corrconf, const double& cent, const int& rndm) //, const int& ptBin
   {
     double dnx, val;
     for(int i=1;i<=fPtAxis->GetNbins();i++){
@@ -155,49 +174,56 @@ struct GfwTutorial {
       
       val = fGFW->Calculate(corrconf, i-1, kFALSE).real() / dnx;
       if (TMath::Abs(val) < 1)
-        registry.fill(tarName, cent, val, dnx);
+        fFC->FillProfile(Form("%s_pt_%i", corrconf.Head.c_str(), i),cent,val,dnx,rndm);
     }
     return;
   }
-
-  void process(aodCollisions::iterator const& collision, aod::BCsWithTimestamps const&, aodTracks const& tracks)
+  //change for run 2
+  void process(aodCollisionsRun3::iterator const& collision, aod::BCsWithTimestamps const&, aodTracks const& tracks)
   {
     int Ntot = tracks.size();
-    if (Ntot < 1)
+    if (Ntot < 1){
+      //LOGF(info,"INFO: too few tracks!");
       return;
-    if (!collision.sel7())
+    }
+    if (!collision.sel8()){ //change to sel7 for run2
+      //LOGF(info,"INFO: sel7 unhappy here");
       return;
+    }
+    //LOGF(info,"INFO: is sel7 ever happy?");
     float vtxz = collision.posZ();
     registry.fill(HIST("hVtxZ"), vtxz);
     registry.fill(HIST("hMult"), Ntot);
-    registry.fill(HIST("hCent"), collision.centRun2V0M());
+    //registry.fill(HIST("hCent"), collision.centRun2V0M());
+    registry.fill(HIST("hCent"), collision.centFT0C());
     fGFW->Clear();
-    const auto cent = collision.centRun2V0M();
+    //const auto cent = collision.centRun2V0M();
+    const auto cent = collision.centFT0C();
+    //LOGF(info,"INFO: centrality is %f",cent);
     float weff = 1, wacc = 1;
     for (auto& track : tracks) {
       registry.fill(HIST("hPhi"), track.phi());
       registry.fill(HIST("hEta"), track.eta());
 
-      if(std::abs(track.tpcNSigmaPi())<=cfgTPCCut){
-        fGFW->Fill(track.eta(), 1, track.phi(), wacc * weff, 1);
-      }
-     
-      //  bool WithinPtPOI = (cfgCutPtPOIMin < track.pt()) && (track.pt() < cfgCutPtPOIMax); // within POI pT range
-      //  bool WithinPtRef = (cfgCutPtMin < track.pt()) && (track.pt() < cfgCutPtMax); // within RF pT range
-      //  if (WithinPtRef) fGFW->Fill(track.eta(), fPtAxis->FindBin(track.pt()) - 1, track.phi(), weff * wacc, 1);
-      //  if (WithinPtPOI) fGFW->Fill(track.eta(), fPtAxis->FindBin(track.pt()) - 1, track.phi(), weff * wacc, 2);
-      //  if (WithinPtPOI && WithinPtRef) fGFW->Fill(track.eta(), fPtAxis->FindBin(track.pt()) - 1, track.phi(), weff * wacc, 4);
-
+      //fGFW->Fill(track.eta(), 1, track.phi(), wacc * weff, 1);
+      // LOGF(info, "!");      
+       bool WithinPtPOI = (cfgCutPtPOIMin < track.pt()) && (track.pt() < cfgCutPtPOIMax); // within POI pT range
+       bool WithinPtRef = (cfgCutPtMin < track.pt()) && (track.pt() < cfgCutPtMax); // within RF pT range
+       if (WithinPtRef) fGFW->Fill(track.eta(), fPtAxis->FindBin(track.pt()) - 1, track.phi(), weff * wacc, 1);
+       if (WithinPtPOI) fGFW->Fill(track.eta(), fPtAxis->FindBin(track.pt()) - 1, track.phi(), weff * wacc, 2);
+       if (WithinPtPOI && WithinPtRef) fGFW->Fill(track.eta(), fPtAxis->FindBin(track.pt()) - 1, track.phi(), weff * wacc, 4);
+      // LOGF(info, "!!"); 
       
     }
 
-    // Filling with ROOT TProfile
-    //FillProfile(corrconfigs.at(0), HIST("c22"), cent);
-
-    //FillPtProfile(corrconfigs.at(1), HIST("ptpoi"), cent);
+    // Filling Flow Container
+    float subsamps = fRndm->Rndm();
+    FillProfile(corrconfigs.at(0), cent, subsamps);
+    FillProfile(corrconfigs.at(1), cent, subsamps);
+    FillProfile(corrconfigs.at(2), cent, subsamps);
+    FillProfile(corrconfigs.at(3), cent, subsamps);
+    FillPtProfile(corrconfigs.at(4), cent, subsamps);
     
-    FillProfile(corrconfigs.at(0), HIST("c22pi"), cent);
-
     
 
   }
